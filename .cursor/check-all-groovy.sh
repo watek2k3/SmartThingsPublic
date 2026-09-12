@@ -11,6 +11,13 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Fail loudly if the toolchain is missing, otherwise the groovyc | grep pipeline
+# below would silently report zero errors and give a false "pass".
+if ! command -v groovyc > /dev/null 2>&1; then
+  echo "ERROR: 'groovyc' not found on PATH. Run .cursor/install.sh to set up the toolchain." >&2
+  exit 2
+fi
+
 if [ "$#" -gt 0 ]; then
   FILES=("$@")
 else
