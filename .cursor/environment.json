@@ -1,0 +1,5 @@
+{
+  "name": "SmartThingsPublic",
+  "user": "ubuntu",
+  "install": "./.cursor/install.sh"
+}
