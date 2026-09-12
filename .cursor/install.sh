@@ -31,15 +31,30 @@ export sdkman_selfupdate_feature=false
 # shellcheck disable=SC1091
 source "$SDKMAN_DIR/bin/sdkman-init.sh"
 
-echo "==> Installing Java ${JAVA_VERSION} (if needed)"
-if [ ! -d "$SDKMAN_DIR/candidates/java/${JAVA_VERSION}" ]; then
-  sdk install java "${JAVA_VERSION}" < /dev/null
-fi
+# Install an SDKMAN candidate idempotently. SDKMAN's `sdk` function can exit
+# non-zero on benign conditions (notably its very first invocation right after a
+# fresh install), so we don't let that abort the script under `set -e`; instead
+# we verify the candidate directory exists and retry once.
+sdk_ensure() {
+  local candidate="$1" version="$2"
+  local dir="$SDKMAN_DIR/candidates/${candidate}/${version}"
+  local attempt
+  for attempt in 1 2; do
+    if [ -d "$dir" ]; then
+      return 0
+    fi
+    echo "==> Installing ${candidate} ${version} (attempt ${attempt})"
+    set +e
+    # shellcheck disable=SC1091
+    source "$SDKMAN_DIR/bin/sdkman-init.sh"
+    sdk install "$candidate" "$version" < /dev/null
+    set -e
+  done
+  [ -d "$dir" ] || { echo "ERROR: failed to install ${candidate} ${version}" >&2; return 1; }
+}
 
-echo "==> Installing Groovy ${GROOVY_VERSION} (if needed)"
-if [ ! -d "$SDKMAN_DIR/candidates/groovy/${GROOVY_VERSION}" ]; then
-  sdk install groovy "${GROOVY_VERSION}" < /dev/null
-fi
+sdk_ensure java "${JAVA_VERSION}"
+sdk_ensure groovy "${GROOVY_VERSION}"
 
 JAVA8_HOME="$SDKMAN_DIR/candidates/java/${JAVA_VERSION}"
 GROOVY_BIN="$SDKMAN_DIR/candidates/groovy/${GROOVY_VERSION}/bin"
@@ -68,8 +83,12 @@ if git -C "$(dirname "$0")/.." rev-parse --git-dir > /dev/null 2>&1; then
   git -C "$(dirname "$0")/.." config core.hooksPath .githooks
 fi
 
-echo "==> Toolchain versions"
+echo "==> Verifying toolchain"
+# Assert the wrappers resolve on PATH and actually run (fail the install
+# otherwise, so a broken setup never looks successful).
+command -v groovy > /dev/null || { echo "ERROR: groovy wrapper not on PATH" >&2; exit 1; }
+command -v groovyc > /dev/null || { echo "ERROR: groovyc wrapper not on PATH" >&2; exit 1; }
 groovy --version
-groovyc --version || true
+groovyc --version
 
 echo "==> install.sh complete"
